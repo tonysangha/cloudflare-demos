@@ -1,0 +1,140 @@
+# BASH Aliases for all users
+echo 'alias log="sudo journalctl -o cat -f _SYSTEMD_UNIT=google-startup-scripts.service"' >> /etc/profile.d/00-aliases.sh
+echo 'alias fulllog="sudo journalctl -xefu google-startup-scripts -f"' >> /etc/profile.d/00-aliases.sh
+echo 'alias whereami="curl ipinfo.io"' >> /etc/profile.d/00-aliases.sh
+echo 'alias showtunnel="ip tunnel show"' >> /etc/profile.d/00-aliases.sh
+echo 'alias showtcpdump="sudo tcpdump -i gre2 -n net 172.17.255.0/24 or 10.10.10.0/24"' >> /etc/profile.d/00-aliases.sh
+
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+
+# Use Cloudflare DNS Servers
+sed -i "s/#prepend domain-name-servers 127.0.0.1;/prepend domain-name-servers 1.1.1.1, 1.0.0.1;/g" /etc/dhcp/dhclient.conf
+systemctl restart systemd-networkd
+
+#########################
+# Package Installation
+#########################
+
+apt-get update
+apt-get install curl jq inetutils-tools strongswan -y
+
+#########################
+# StrongSwan Configuration
+#########################
+
+# https://developers.cloudflare.com/magic-wan/configuration/manually/third-party/strongswan/
+
+# Edit StrongSwan configuration
+
+sed -i '9i install_routes = no' /etc/strongswan.conf
+sed -i '10i install_virtual_ip = no' /etc/strongswan.conf
+
+# configure IPsec file
+cat > /etc/ipsec.conf << "EOF"
+# ipsec.conf - strongSwan IPsec configuration file
+config setup
+    charondebug="all"
+    uniqueids = yes
+
+conn %default
+    ikelifetime=4h
+    rekey=yes
+    reauth=no
+    keyexchange=ikev2
+    authby=secret
+    dpdaction=restart
+    closeaction=restart
+
+conn cloudflare-ipsec
+    auto=start
+    type=tunnel
+    fragmentation=no
+    leftauth=psk
+    # Private IP of the VM
+    left=%any
+    # Tunnel ID from dashboard, in this example FQDN is used
+    leftid=LEFTFQDN
+    leftsubnet=0.0.0.0/0
+    # Cloudflare Anycast IP
+    right=${cf_endpoint}
+    rightid=${cf_endpoint}
+    rightsubnet=0.0.0.0/0
+    rightauth=psk
+    ike=aes256-sha256-modp2048!
+    esp=aes256-sha256-modp2048!
+    replay_window=0
+    mark_in=42
+    mark_out=42
+    leftupdown=/etc/strongswan.d/ipsec-vti.sh
+EOF
+
+# Add the secret to the ipsec.secrets file
+# https://wiki.strongswan.org/projects/strongswan/wiki/Ipsecsecrets
+
+cat >> /etc/ipsec.secrets << "EOF"
+# This file holds shared secrets or RSA private keys for authentication.
+
+# RSA private key for this host, authenticating it to any other host
+# which knows the public part.
+
+: PSK "${psk}"
+EOF
+
+
+# Create the Virtual Tunnel Interface
+
+cat > /etc/strongswan.d/ipsec-vti.sh << "EOF"
+#!/bin/bash
+
+set -o nounset
+set -o errexit
+
+VTI_IF="vti0"
+
+case "$${PLUTO_VERB}" in
+    up-client)
+        ip tunnel add "$${VTI_IF}" local "$${PLUTO_ME}" remote "$${PLUTO_PEER}" mode vti \
+        key "$${PLUTO_MARK_OUT%%/*}"
+        ip link set "$${VTI_IF}" up
+        ip addr add ${health_check_ip}/32 dev vti0
+        sysctl -w "net.ipv4.conf.$${VTI_IF}.disable_policy=1"
+        sysctl -w "net.ipv4.conf.$${VTI_IF}.rp_filter=0"
+        sysctl -w "net.ipv4.conf.all.rp_filter=0"
+        ip rule add from ${health_check_ip} lookup viatunicmp
+        ip route add default dev vti0 table viatunicmp
+        ;;
+    down-client)
+        ip tunnel del "$${VTI_IF}"
+        ip rule del from ${health_check_ip} lookup viatunicmp
+        ip route del default dev vti0 table viatunicmp
+        ;;
+esac
+echo "executed"
+EOF
+
+# Add Policy Based Routing
+# https://developers.cloudflare.com/magic-wan/configuration/manually/third-party/strongswan/#4-add-policy-based-routing-pbr
+
+sed -i '8i 200 viatunicmp' /etc/iproute2/rt_tables
+ip rule add from ${health_check_ip} lookup viatunicmp
+ip route add default dev vti0 table viatunicmp
+
+
+# find fqdn ID for tunnel 
+output=$(curl --request GET \
+  --url https://api.cloudflare.com/client/v4/accounts/${account_id}/magic/ipsec_tunnels \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Key: ${api_key}" \
+  --header "X-Auth-Email: ${email}" | jq -r ".result.ipsec_tunnels[] | select(.name==\"${tunnel_name}\") | .remote_identities.fqdn_id")
+
+# replace placeholder value with tunnel id
+sed -i "s/LEFTFQDN/$output/" /etc/ipsec.conf
+
+# clear variable from memory
+unset output
+
+# create loopback adapter to mimic LAN environment
+sudo ip addr add ${loopback_addr} dev lo
+
+# start IPsec
+ipsec start

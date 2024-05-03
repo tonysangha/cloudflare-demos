@@ -1,5 +1,25 @@
+# Variables for Provider Level Settings
+
 variable "gcp_project" {
   description = "GCP Project ID"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_account_id" {
+  description = "The Cloudflare UUID for the Account the Zone lives in."
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_email" {
+  description = "The Cloudflare user."
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_api_key" {
+  description = "Cloudflare API key"
   type        = string
   sensitive   = true
 }
@@ -42,6 +62,11 @@ variable "vpc" {
   description = "Virtual Private Cloud Network"
   type        = string
   default     = "default"
+}
+
+variable "linux_script" {
+  description = "Configuration Script for Linux VMs in GCP"
+  type        = string
 }
 
 variable "vms" {

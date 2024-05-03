@@ -37,4 +37,16 @@ resource "google_compute_instance" "vm_instance" {
     }
   }
 
+  metadata_startup_script = templatefile(var.linux_script,
+    {
+      account_id      = var.cloudflare_account_id
+      api_key         = var.cloudflare_api_key
+      email           = var.cloudflare_email
+      psk             = random_password.ipsec_psk.result,
+      cf_endpoint     = each.value.tunnel_1.cf_endpoint
+      tunnel_name     = each.value.tunnel_1.name
+      health_check_ip = each.value.tunnel_1.health_check_ip
+      loopback_addr   = each.value.tunnel_1.loopback_addr
+  })
+
 }
