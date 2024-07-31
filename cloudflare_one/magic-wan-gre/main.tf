@@ -77,7 +77,7 @@ resource "cloudflare_gre_tunnel" "gre_tunnel" {
   ttl                     = 64
   mtu                     = 1476
   health_check_enabled    = true
-  depends_on = [data.google_compute_instance.cld_rtr]
+  depends_on              = [data.google_compute_instance.cld_rtr]
 }
 
 resource "cloudflare_static_route" "gre_static_routes" {
