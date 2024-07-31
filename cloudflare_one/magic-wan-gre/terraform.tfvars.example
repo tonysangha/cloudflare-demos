@@ -19,8 +19,6 @@ network_tier = "STANDARD"
 machine_type = "e2-micro"
 script_loc   = "./scripts/cloud-rtr.tpl"
 
-
-
 cloud_routers = {
 
   hong-kong = {
