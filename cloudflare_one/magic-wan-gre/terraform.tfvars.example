@@ -1,0 +1,62 @@
+cloudflare_email      = ""
+cloudflare_api_key    = ""
+cloudflare_account_id = ""
+cf_gre_ip_1  = ""
+# cf_gre_ip_2  = ""
+
+gcp_project      = ""
+gcp_label_owner  = ""
+gcp_label_team   = ""
+gcp_label_region = ""
+gcp_network_tag  = ""
+vpc          = "default"
+subnetwork   = "default"
+
+# Regions = https://cloud.google.com/compute/docs/regions-zones
+
+server_image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+network_tier = "STANDARD"
+machine_type = "e2-micro"
+script_loc   = "./scripts/cloud-rtr.tpl"
+
+
+
+cloud_routers = {
+
+  hong-kong = {
+    server_name  = "mw-hkg"
+    zone         = "asia-east2-a"
+    lo_cidr      = "172.17.255.251/32"
+    gre_lcl_cidr = "10.10.10.100/31"
+    gre_next_hop = "10.10.10.100"
+    gre_pub_cidr = "10.10.10.101/31"
+  }
+
+  mumbai = {
+    server_name  = "mw-bom"
+    zone         = "asia-south1-a"
+    lo_cidr      = "172.17.255.252/32"
+    gre_lcl_cidr = "10.10.10.102/31"
+    gre_next_hop = "10.10.10.102"
+    gre_pub_cidr = "10.10.10.103/31"
+  }
+
+  sydney = {
+    server_name  = "mw-syd"
+    zone         = "australia-southeast1-a"
+    lo_cidr      = "172.17.255.253/32"
+    gre_lcl_cidr = "10.10.10.104/31"
+    gre_next_hop = "10.10.10.104"
+    gre_pub_cidr = "10.10.10.105/31"
+  }
+
+  tokyo = {
+    server_name  = "mw-hnd"
+    zone         = "asia-northeast1-a"
+    lo_cidr      = "172.17.255.254/32"
+    gre_lcl_cidr = "10.10.10.106/31"
+    gre_next_hop = "10.10.10.106"
+    gre_pub_cidr = "10.10.10.107/31"
+  }
+
+}
