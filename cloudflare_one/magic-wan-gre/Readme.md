@@ -6,12 +6,12 @@ This lab environment will automate the creation of a four site Magic WAN topolog
 
 Each site has a Loopback adapter that's designed to mimic a LAN interface, and the network addresses will be used to create static routes in Cloudflare's Magic WAN configuration. The table below lists all the specific IP addresses used.
 
-| Site      | Loopback Adapter  |  GRE Tunnel VM IP  | GRE Tunnel CF IP |
-| :-------- | :---------------: | :-------------: | :-----------: |
-| Hong Kong | 172.17.255.251/32 | 10.10.10.100/31 | 10.10.10.101  |
-| Mumbai    | 172.17.255.252/32 | 10.10.10.102/31 | 10.10.10.103  |
-| Sydney    | 172.17.255.253/32 | 10.10.10.104/31 | 10.10.10.105  |
-| Tokyo     | 172.17.255.254/32 | 10.10.10.106/31 | 10.10.10.107  |
+| Site      | Loopback Adapter  | GRE Tunnel VM IP | GRE Tunnel CF IP |
+| :-------- | :---------------: | :--------------: | :--------------: |
+| Hong Kong | 172.17.255.251/32 | 10.10.10.100/31  | 10.10.10.101/31  |
+| Mumbai    | 172.17.255.252/32 | 10.10.10.102/31  | 10.10.10.103/31  |
+| Sydney    | 172.17.255.253/32 | 10.10.10.104/31  | 10.10.10.105/31  |
+| Tokyo     | 172.17.255.254/32 | 10.10.10.106/31  | 10.10.10.107/31  |
 
 ## Automation
 
@@ -25,7 +25,7 @@ This lab is automated end to end using Terraform with configuration being done a
 
 # Lab Environment
 
-Below is a list of useful commands to validate VMs can ping each other, and perform packet captures. 
+Below is a list of useful commands to validate VMs can ping each other, and perform packet captures.
 
 - `whereami` - Confirm Public IP information using IP data
 - `showtunnel` - Show GRE Tunnel Details
@@ -47,9 +47,10 @@ Prior to deployment, ensure the following pre-reqs have been met:
 
 - Copy the `terraform.tfvars.example` to `terraform.tfvars`
 - Add missing variables for your environment, lines `1 - 9`
+- Initialise the providers `terraform init --upgrade`
 - Deploy lab using command `terraform apply`
 - Destroy lab using command `terraform destroy`
 
-Once the deployment has succeeded you can `ping` from one VM to anothers loopback, and all health checks should also display as healthy in Cloudflare's Dashboard. 
+Once the deployment has succeeded you can `ping` from one VM to another's loopback, and all health checks should also display as healthy in Cloudflare's Dashboard.
 
 ![health-checks](./images/successful-health-checks.png)
