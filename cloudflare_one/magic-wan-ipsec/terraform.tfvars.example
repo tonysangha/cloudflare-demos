@@ -1,0 +1,77 @@
+# cloudflare_email      = ""
+# cloudflare_api_key    = ""
+# cloudflare_account_id = ""
+# cf_gre_ip_1 = ""
+# cf_gre_ip_2  = ""
+
+gcp_project      = ""
+gcp_label_owner  = ""
+gcp_label_team   = ""
+gcp_label_region = ""
+gcp_network_tag  = ""
+
+machine_type = "e2-micro"
+server_image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+network_type = "STANDARD"
+vpc          = "anz-se-vpc"
+subnetwork   = "anz-se-vpc"
+linux_script = "./scripts/cloud-rtr.tftpl"
+
+# Cloud router configuration
+
+cloud-rtrs = {
+
+  hong-kong = {
+    server_name = "mw-hkg"
+    zone        = "asia-east2-a"
+    tunnel_1 = {
+      name           = "hkg-to-cf"
+      description    = "Hong Kong GCP Router to Cloudflare IPSec tunnel"
+      vm_int_addr    = "10.10.10.100/31"
+      cf_next_hop_ip = "10.10.10.100"
+      cf_int_addr    = "10.10.10.101/31"
+      loopback_addr  = "172.17.255.251/32"
+    }
+  }
+
+  mumbai = {
+    server_name = "mw-bom"
+    zone        = "asia-south1-a"
+    tunnel_1 = {
+      name           = "bom-to-cf"
+      description    = "Mumbai GCP Router to Cloudflare IPSec tunnel"
+      vm_int_addr    = "10.10.10.102/31"
+      cf_next_hop_ip = "10.10.10.102"
+      cf_int_addr    = "10.10.10.103/31"
+      loopback_addr  = "172.17.255.252/32"
+    }
+  }
+
+  sydney = {
+    server_name = "mw-syd"
+    zone        = "australia-southeast1-a"
+    tunnel_1 = {
+      name           = "syd-to-cf"
+      description    = "Sydney GCP Router to Cloudflare IPSec tunnel"
+      vm_int_addr    = "10.10.10.104/31"
+      cf_next_hop_ip = "10.10.10.104"
+      cf_int_addr    = "10.10.10.105/31"
+      loopback_addr  = "172.17.255.253/32"
+    }
+  }
+
+  tokyo = {
+    server_name = "mw-hnd"
+    zone        = "asia-south1-a"
+    tunnel_1 = {
+      name           = "hnd-to-cf"
+      description    = "Tokyo GCP Router to Cloudflare IPSec tunnel"
+      vm_int_addr    = "10.10.10.106/31"
+      cf_next_hop_ip = "10.10.10.106"
+      cf_int_addr    = "10.10.10.107/31"
+      loopback_addr  = "172.17.255.254/32"
+    }
+  }
+
+}
+

@@ -1,0 +1,174 @@
+# BASH Aliases for all users
+echo 'alias log="sudo journalctl -o cat -f _SYSTEMD_UNIT=google-startup-scripts.service"' >> /etc/profile.d/00-aliases.sh
+echo 'alias fulllog="sudo journalctl -xefu google-startup-scripts -f"' >> /etc/profile.d/00-aliases.sh
+echo 'alias whereami="curl ipinfo.io"' >> /etc/profile.d/00-aliases.sh
+echo 'alias showtunnel="sudo ip xfrm state"' >> /etc/profile.d/00-aliases.sh
+echo 'alias showroute="sudo ip xfrm policy"' >> /etc/profile.d/00-aliases.sh
+echo 'alias showipsec="sudo ipsec statusall"' >> /etc/profile.d/00-aliases.sh
+echo 'alias reloadipsec="sudo ipsec reload"' >> /etc/profile.d/00-aliases.sh
+echo 'alias restartipsec="sudo ipsec restart"' >> /etc/profile.d/00-aliases.sh
+
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+
+#########################
+# Package Installation
+#########################
+
+apt-get update
+apt-get install curl jq net-tools strongswan -y
+
+#########################
+# Networking Configuration
+#########################
+
+# Associate IP Address to Loopback
+cat > /etc/netplan/99-loopback.yaml << "EOF"
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    lo:
+      addresses: [${loopback_addr}]
+EOF
+
+# Change permissions of Netplan yaml file's
+chmod 600 /etc/netplan/99-loopback.yaml
+
+# Apply the loopback adapter changes
+netplan apply
+
+# Restart Networking Service to ensure all sysctl changes are updated
+systemctl restart systemd-networkd
+
+#########################
+# StrongSwan Configuration
+#########################
+
+# https://developers.cloudflare.com/magic-wan/configuration/manually/third-party/strongswan/
+
+# The following configuration ensure not all traffic (0/0) is routed through the IPSec tunnel
+sed -i '9i install_routes = no' /etc/strongswan.conf
+sed -i '10i install_virtual_ip = no' /etc/strongswan.conf
+sed -i '11i delete_rekeyed_delay = 150' /etc/strongswan.conf
+
+# configure IPsec file
+cat > /etc/ipsec.conf << "EOF"
+# ipsec.conf - strongSwan IPsec configuration file
+config setup
+    charondebug="all"
+    uniqueids=yes
+
+conn %default
+    ikelifetime=4h
+    rekey=yes
+    reauth=no
+    keyexchange=ikev2
+    authby=secret
+    dpdaction=restart
+    closeaction=restart
+
+conn cloudflare-ipsec
+    auto=start
+    type=tunnel
+    fragmentation=no
+    forceencaps=no
+    leftauth=psk
+    # Private IP of the VM
+    left=%any
+    # Tunnel ID from dashboard, in this example FQDN is used
+    leftid=LEFTFQDN
+    leftsubnet=0.0.0.0/0
+    # Cloudflare Anycast IP
+    right=${cf_endpoint}
+    rightid=${cf_endpoint}
+    rightsubnet=0.0.0.0/0
+    rightauth=psk
+    ike=aes256gcm16-prfsha512-modp2048
+    esp=aes256gcm16-prfsha512-modp2048
+    replay_window=0
+    mark_in=42
+    mark_out=42
+    leftupdown=/etc/strongswan.d/ipsec-vti.sh
+EOF
+
+# Create the Virtual Tunnel Interface
+cat > /etc/strongswan.d/ipsec-vti.sh << "EOF"
+#!/bin/bash
+set -o nounset
+set -o errexit
+IP=$(which ip)
+
+# Use parameter expansion instead of arrays
+PLUTO_MARK_OUT_FIRST=$${PLUTO_MARK_OUT%%/*}
+PLUTO_MARK_IN_FIRST=$${PLUTO_MARK_IN%%/*}
+
+# Update the following variables
+VTI_IF="vti0"
+VTI_LOCAL_IP="${vm_int_addr}" # Host side of tunnel
+VTI_REMOTE_IP="${cf_int_addr}" # Cloudflare side of tunnel
+ETH_INTF="ens4"
+
+case "$${PLUTO_VERB}" in
+     up-client)
+        $IP link add $${VTI_IF} type vti local $${PLUTO_ME} remote $${PLUTO_PEER} okey $${PLUTO_MARK_OUT_FIRST} ikey $${PLUTO_MARK_IN_FIRST}
+        $IP addr add $${VTI_LOCAL_IP} remote $${VTI_REMOTE_IP} dev $${VTI_IF}
+        $IP link set $${VTI_IF} up mtu 1436
+         sysctl -w net.ipv4.ip_forward=1
+         sysctl -w "net.ipv4.conf.$${VTI_IF}.disable_policy=1"
+         sysctl -w "net.ipv4.conf.$${VTI_IF}.accept_local=1"
+         sysctl -w "net.ipv4.conf.$${VTI_IF}.rp_filter=0"
+         sysctl -w "net.ipv4.conf.$${ETH_INTF}.accept_local=1"
+         sysctl -w "net.ipv4.conf.$${ETH_INTF}.rp_filter=0"
+         # Networks I want to route through the tunnel
+         ip route add 10.10.10.0/24 dev $${VTI_IF} # Tunnel Interface addresses
+         ip route add 172.17.255.0/24 dev $${VTI_IF} # Loopback addresses
+         ip route add 100.96.0.0/12 dev $${VTI_IF} # Address range for WARP
+         ;;
+     down-client)
+         # Delete the network routes when the tunnel is downed.
+         ip route del 10.10.10.0/24 dev $${VTI_IF} # Tunnel Interface addresses
+         ip route del 172.17.255.0/24 dev $${VTI_IF} # Loopback addresses
+         ip route del 100.96.0.0/12 dev $${VTI_IF} # Address range for WARP
+         # Delete the tunnel
+         ip tunnel del "$${VTI_IF}"
+         ;;
+esac
+EOF
+
+#Make the script executable
+chmod +x /etc/strongswan.d/ipsec-vti.sh
+
+# Add the secret to the ipsec.secrets file
+# https://wiki.strongswan.org/projects/strongswan/wiki/Ipsecsecrets
+
+cat > /etc/ipsec.secrets << "EOF"
+# This file holds shared secrets or RSA private keys for authentication.
+
+# RSA private key for this host, authenticating it to any other host
+# which knows the public part.
+
+: PSK "${psk}"
+EOF
+
+# find fqdn ID for tunnel
+output=$(curl --request GET \
+  --url https://api.cloudflare.com/client/v4/accounts/${account_id}/magic/ipsec_tunnels \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Key: ${api_key}" \
+  --header "X-Auth-Email: ${email}" | jq -r ".result.ipsec_tunnels[] | select(.name==\"${tunnel_name}\") | .remote_identities.fqdn_id")
+
+# replace placeholder value with tunnel id
+sed -i "s/LEFTFQDN/$output/" /etc/ipsec.conf
+
+# clear variable from memory
+unset output
+
+# Enable and start Strongswan to start at boot
+systemctl enable strongswan-starter
+systemctl start strongswan-starter
+
+# Go through enablement of IPSec Tunnel
+ipsec down cloudflare-ipsec
+ipsec reload
+ipsec restart
+ipsec up cloudflare-ipsec
