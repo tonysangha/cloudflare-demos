@@ -1,6 +1,6 @@
 output "ipsec_tunnel_ids" {
   value = {
-    for k, v in cloudflare_ipsec_tunnel.ipsec_rtr : k => v.id
+    for k, v in cloudflare_magic_wan_ipsec_tunnel.ipsec_rtr : k => v.id
   }
 }
 

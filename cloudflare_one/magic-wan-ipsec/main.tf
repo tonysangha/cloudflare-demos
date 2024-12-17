@@ -58,7 +58,7 @@ resource "google_compute_instance" "cloud-rtr" {
 }
 
 # https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/ipsec_tunnel
-resource "cloudflare_ipsec_tunnel" "ipsec_rtr" {
+resource "cloudflare_magic_wan_ipsec_tunnel" "ipsec_rtr" {
 
   for_each = var.cloud-rtrs
 
@@ -85,5 +85,5 @@ resource "cloudflare_static_route" "static_routes" {
   prefix      = each.value.tunnel_1.loopback_addr
   nexthop     = each.value.tunnel_1.cf_next_hop_ip
   priority    = 100
-  depends_on  = [cloudflare_ipsec_tunnel.ipsec_rtr]
+  depends_on  = [cloudflare_magic_wan_ipsec_tunnel.ipsec_rtr]
 }

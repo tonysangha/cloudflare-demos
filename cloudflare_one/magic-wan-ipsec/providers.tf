@@ -1,11 +1,11 @@
 terraform {
   required_providers {
     google = {
-      version = "~> 5.0.0"
+      version = "~> 6.14.0"
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.38.0"
+      version = "~> 4.48.0"
     }
   }
 }
