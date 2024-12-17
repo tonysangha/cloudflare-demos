@@ -80,7 +80,7 @@ resource "cloudflare_magic_wan_gre_tunnel" "gre_tunnel" {
   depends_on              = [data.google_compute_instance.cld_rtr]
 }
 
-resource "cloudflare_static_route" "gre_static_routes" {
+resource "cloudflare_magic_wan_static_route" "gre_static_routes" {
 
   account_id  = var.cloudflare_account_id
   for_each    = data.google_compute_instance.cld_rtr
