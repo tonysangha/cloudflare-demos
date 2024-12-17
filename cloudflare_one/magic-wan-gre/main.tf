@@ -65,7 +65,7 @@ data "google_compute_instance" "cld_rtr" {
   depends_on = [google_compute_instance.cloud_routers]
 }
 
-resource "cloudflare_gre_tunnel" "gre_tunnel" {
+resource "cloudflare_magic_wan_gre_tunnel" "gre_tunnel" {
 
   account_id              = var.cloudflare_account_id
   for_each                = data.google_compute_instance.cld_rtr
@@ -90,5 +90,5 @@ resource "cloudflare_static_route" "gre_static_routes" {
   priority    = 100
   weight      = 10
 
-  depends_on = [cloudflare_gre_tunnel.gre_tunnel]
+  depends_on = [cloudflare_magic_wan_gre_tunnel.gre_tunnel]
 }
