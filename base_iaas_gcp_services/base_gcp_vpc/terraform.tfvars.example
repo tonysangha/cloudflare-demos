@@ -1,0 +1,4 @@
+gcp_project     = ""
+vpc_name        = ""
+vpc_description = ""
+routing_mode    = "REGIONAL"
