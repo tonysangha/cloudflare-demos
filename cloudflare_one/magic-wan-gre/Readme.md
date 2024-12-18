@@ -23,7 +23,7 @@ This lab is automated end to end using Terraform with configuration being done a
 - Configure [Static Routes](https://developers.cloudflare.com/magic-wan/configuration/manually/how-to/configure-static-routes/) in Cloudflare
 - Automate the configuration of Ubuntu 24.04 LTS VM's
 
-# Lab Environment
+## Lab Environment
 
 Below is a list of useful commands to validate VMs can ping each other, and perform packet captures.
 
@@ -73,8 +73,8 @@ Once the profile is configured, update the `state.config` file with your bucket 
 
 - Copy the `terraform.tfvars.example` to `terraform.tfvars`
 - Add missing variables for your environment, lines `1 - 9`
-- Initialise the providers if not using R2 for state: `terraform init --upgrade`
-- Initialise the providers if you are using R2 for state: `terraform init -backend-config="./state.config" -backend-config="endpoint=<ACCOUNT_ID>.r2.cloudflarestorage.com"`
+- Initialize the providers if not using R2 for state: `terraform init --upgrade`
+- Initialize the providers if you are using R2 for state: `terraform init -backend-config="./state.config" -backend-config="endpoint=<ACCOUNT_ID>.r2.cloudflarestorage.com"`
   - Ensure `<ACCOUNT_ID>` is replaced with your Cloudflare Account ID
 - Deploy lab using command `terraform apply`
 - Destroy lab using command `terraform destroy`
