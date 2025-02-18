@@ -1,0 +1,7 @@
+cloudflare_zone_id = ""
+cloudflare_account_id = ""
+cloudflare_email = ""
+cloudflare_api_key = ""
+
+rule_name = "name"
+rule_desc = "description"
