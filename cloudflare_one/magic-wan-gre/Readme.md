@@ -49,6 +49,7 @@ Prior to deployment, ensure the following pre-reqs have been met:
 
 The following sequence diagram depicts the packet flow between two loopback adapters. 
 
+```mermaid
 sequenceDiagram
     participant Client as Hong Kong - Loopback (172.17.255.251)
     participant VMa as Hong Kong VM
@@ -70,6 +71,7 @@ sequenceDiagram
     VMb-->>CFa: 6. GRE Encapsulated Response
     CFa-->>VMa: 7. GRE Encapsulated Response
     VMa-->>Client: 8. Original Response Delivered
+```
 
 ## State Files
 
