@@ -20,6 +20,11 @@ variable "gcp_project" {
   description = "GCP Project ID"
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(var.gcp_project) > 4 && length(var.gcp_project) < 30
+    error_message = "The GCP project ID must be between 5 and 29 characters."
+  }
 }
 
 variable "gcp_label_owner" {
@@ -45,6 +50,11 @@ variable "gcp_network_tag" {
 variable "machine_type" {
   description = "Machine Type for use in GCP"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][0-9]-[a-z]+$", var.machine_type))
+    error_message = "The machine_type must be a valid GCP machine type format (e.g., 'e2-micro')."
+  }
 }
 
 variable "server_image" {
@@ -55,6 +65,11 @@ variable "server_image" {
 variable "network_tier" {
   description = "Standard or Premium Network Type"
   type        = string
+
+  validation {
+    condition     = contains(["STANDARD", "PREMIUM"], var.network_tier)
+    error_message = "The network_tier must be either 'STANDARD' or 'PREMIUM'."
+  }
 }
 
 variable "script_loc" {
@@ -74,18 +89,50 @@ variable "subnetwork" {
 
 variable "cloud_routers" {
   description = "Map of Cloud Routers"
-  type        = map(any)
-  default     = {}
+  type = map(object({
+    server_name  = string
+    zone         = string
+    lo_cidr      = string
+    gre_lcl_cidr = string
+    gre_next_hop = string
+    gre_pub_cidr = string
+  }))
+
+  validation {
+    condition = alltrue([
+      for router in var.cloud_routers :
+      can(regex("^[a-z]+-[a-z0-9]+-[a-z]$", router.zone))
+    ])
+    error_message = "All router zones must be in a valid GCP zone format (e.g., 'australia-southeast1-a')."
+  }
+
+  validation {
+    condition = alltrue([
+      for router in var.cloud_routers :
+      can(cidrnetmask(router.lo_cidr))
+    ])
+    error_message = "All loopback CIDR blocks must be valid."
+  }
 }
 
 variable "cf_gre_ip_1" {
   description = "Cloudflare GRE Tunnel IP Address"
   type        = string
   default     = ""
+
+  validation {
+    condition     = can(cidrnetmask("${var.cf_gre_ip_1}/32"))
+    error_message = "The cf_gre_ip_1 value must be a valid IP address"
+  }
 }
 
 variable "cf_gre_ip_2" {
   description = "Cloudflare GRE Tunnel IP Address"
   type        = string
   default     = ""
+
+  validation {
+    condition     = can(cidrnetmask("${var.cf_gre_ip_2}/32"))
+    error_message = "The cf_gre_ip_2 value must be a valid IP address"
+  }
 }

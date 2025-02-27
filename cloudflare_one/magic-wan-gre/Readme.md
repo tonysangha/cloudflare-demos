@@ -45,6 +45,32 @@ Prior to deployment, ensure the following pre-reqs have been met:
 - (Optional) have a Cloudflare R2 bucket setup to be used for Terraform state files
 - (Optional) if using R2, ensure the [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) is installed on your system
 
+## Packet Flow
+
+The following sequence diagram depicts the packet flow between two loopback adapters. 
+
+sequenceDiagram
+    participant Client as Hong Kong - Loopback (172.17.255.251)
+    participant VMa as Hong Kong VM
+    participant CFa as Cloudflare Anycast Network
+    participant VMb as Mumbai VM
+    participant Server as Mumbai Loopback (172.17.255.252)
+    
+    Note over Client,Server: Cross-Site Communication Flow
+    
+    Client->>VMa: 1. IP Packet to 172.17.255.252
+    Note right of VMa: Route lookup: Next hop is<br/>GRE tunnel to Cloudflare
+    VMa->>CFa: 2. GRE Encapsulated Packet<br/>(src: 10.10.10.100, dst: 10.10.10.101)
+    Note right of CFa: Magic WAN Policy Processing<br/>Route lookup: Next hop is<br/>GRE tunnel to Mumbai
+    CFa->>VMb: 3. GRE Encapsulated Packet<br/>(src: 10.10.10.103, dst: 10.10.10.102)
+    Note right of VMb: Decapsulate GRE Packet<br/>Route lookup: Next hop is<br/>local loopback
+    VMb->>Server: 4. Original IP Packet Delivered
+    
+    Server-->>VMb: 5. Response Packet to 172.17.255.251
+    VMb-->>CFa: 6. GRE Encapsulated Response
+    CFa-->>VMa: 7. GRE Encapsulated Response
+    VMa-->>Client: 8. Original Response Delivered
+
 ## State Files
 
 If you do not intend to leverage R2 for state, comment out the following lines in the `providers.tf` file:
