@@ -117,7 +117,7 @@ A visual representation of the deployment architecture is as follows:
 
 ```mermaid
 graph TD
-    subgraph "Magic WAN Deployment with GRE Encapsulation"
+    subgraph "Magic WAN Deployment"
         TF[Terraform CLI] -->|Provisions| GCP
         TF -->|Configures| CF[Cloudflare Magic WAN]
         TF -->|Creates| FW[Firewall Rules]
