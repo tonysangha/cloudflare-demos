@@ -110,3 +110,107 @@ Once the profile is configured, update the `state.config` file with your bucket 
 Once the deployment has succeeded you can `ping` from one VM to another's loopback, and all health checks should also display as healthy in Cloudflare's Dashboard.
 
 ![health-checks](./images/successful-health-checks.png)
+
+#### Deployment Architecture
+
+A visual representation of the deployment architecture is as follows:
+
+```mermaid
+graph TD
+    subgraph "Magic WAN Deployment with GRE Encapsulation"
+        TF[Terraform CLI] -->|Provisions| GCP
+        TF -->|Configures| CF[Cloudflare Magic WAN]
+        TF -->|Creates| FW[Firewall Rules]
+    end
+    
+    subgraph "GCP Resources"
+        GCP -->|Creates| VM1[Hong Kong VM]
+        GCP -->|Creates| VM2[Mumbai VM]
+        GCP -->|Creates| VM3[Sydney VM]
+        GCP -->|Creates| VM4[Tokyo VM]
+        FW -->|Protects| VM1
+        FW -->|Protects| VM2
+        FW -->|Protects| VM3
+        FW -->|Protects| VM4
+    end
+    
+    subgraph "VM Configuration"
+        VM1 -->|Configured by| Script1[cloud-rtr.tpl]
+        VM2 -->|Configured by| Script2[cloud-rtr.tpl]
+        VM3 -->|Configured by| Script3[cloud-rtr.tpl]
+        VM4 -->|Configured by| Script4[cloud-rtr.tpl]
+        
+        Script1 -->|Creates| LO1[Loopback Interface]
+        Script1 -->|Creates| GRE1[GRE Tunnel]
+        Script2 -->|Creates| LO2[Loopback Interface]
+        Script2 -->|Creates| GRE2[GRE Tunnel]
+        Script3 -->|Creates| LO3[Loopback Interface]
+        Script3 -->|Creates| GRE3[GRE Tunnel]
+        Script4 -->|Creates| LO4[Loopback Interface]
+        Script4 -->|Creates| GRE4[GRE Tunnel]
+    end
+    
+    subgraph "Cloudflare Magic WAN"
+        CF -->|Creates| CFT1[GRE Tunnel 1]
+        CF -->|Creates| CFT2[GRE Tunnel 2]
+        CF -->|Creates| CFT3[GRE Tunnel 3]
+        CF -->|Creates| CFT4[GRE Tunnel 4]
+        CF -->|Configures| CFSR[Static Routes]
+        CF -->|Enables| CFHC[Health Checks]
+    end
+    
+    GRE1 <-->|Establishes| CFT1
+    GRE2 <-->|Establishes| CFT2
+    GRE3 <-->|Establishes| CFT3
+    GRE4 <-->|Establishes| CFT4
+
+    %% Define styles
+    classDef terraformClass fill:#e7f5fe,stroke:#4a86e8,stroke-width:2px;
+    classDef gcpClass fill:#f1f8e9,stroke:#7cb342,stroke-width:2px;
+    classDef vmClass fill:#fff8e1,stroke:#ffb74d,stroke-width:2px;
+    classDef cfClass fill:#fff3e0,stroke:#f38020,stroke-width:2px;
+    classDef tunnelClass fill:#e3f2fd,stroke:#2196f3,stroke-width:1px;
+    
+    %% Apply styles
+    class TF,FW terraformClass;
+    class GCP,VM1,VM2,VM3,VM4 gcpClass;
+    class Script1,Script2,Script3,Script4,LO1,LO2,LO3,LO4 vmClass;
+    class CF,CFSR,CFHC cfClass;
+    class GRE1,GRE2,GRE3,GRE4,CFT1,CFT2,CFT3,CFT4 tunnelClass;
+    
+    %% Define link styles
+    linkStyle 0 stroke:#4a86e8,stroke-width:2px;
+    linkStyle 1 stroke:#4a86e8,stroke-width:2px;
+    linkStyle 2 stroke:#4a86e8,stroke-width:2px;
+    
+    linkStyle 3 stroke:#7cb342,stroke-width:2px;
+    linkStyle 4 stroke:#7cb342,stroke-width:2px;
+    linkStyle 5 stroke:#7cb342,stroke-width:2px;
+    linkStyle 6 stroke:#7cb342,stroke-width:2px;
+    
+    linkStyle 7 stroke:#ffb74d,stroke-width:2px;
+    linkStyle 8 stroke:#ffb74d,stroke-width:2px;
+    linkStyle 9 stroke:#ffb74d,stroke-width:2px;
+    linkStyle 10 stroke:#ffb74d,stroke-width:2px;
+    
+    linkStyle 11 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 12 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 13 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 14 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 15 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 16 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 17 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    linkStyle 18 stroke:#ffb74d,stroke-width:1.5px,stroke-dasharray:5 5;
+    
+    linkStyle 19 stroke:#f38020,stroke-width:2px;
+    linkStyle 20 stroke:#f38020,stroke-width:2px;
+    linkStyle 21 stroke:#f38020,stroke-width:2px;
+    linkStyle 22 stroke:#f38020,stroke-width:2px;
+    linkStyle 23 stroke:#f38020,stroke-width:2px;
+    linkStyle 24 stroke:#f38020,stroke-width:2px;
+    
+    linkStyle 25 stroke:#2196f3,stroke-width:3px;
+    linkStyle 26 stroke:#2196f3,stroke-width:3px;
+    linkStyle 27 stroke:#2196f3,stroke-width:3px;
+    linkStyle 28 stroke:#2196f3,stroke-width:3px;
+```
