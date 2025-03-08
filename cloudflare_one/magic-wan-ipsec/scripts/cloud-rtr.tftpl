@@ -1,3 +1,28 @@
+# IPsec Setup Script
+# 
+# Description: This script configures a StrongSwan IPsec tunnel to Cloudflare.
+#
+# Prerequisites:
+#   - Ubuntu/Debian-based system
+#   - Root privileges
+#   - Required variables (listed below)
+#
+# Usage: Used as part of startup-script
+#
+# Required variables (provided by Terraform):
+#   - loopback_addr: IP address for loopback interface
+#   - cf_endpoint: Cloudflare Anycast IP
+#   - vm_int_addr: VM internal address for VTI
+#   - cf_int_addr: Cloudflare internal address for VTI
+#   - psk: Pre-shared key for IPsec
+#   - account_id: Cloudflare account ID
+#   - api_key: Cloudflare API key
+#   - email: Cloudflare account email
+
+##############################################
+# 0. System Preparation and Alias Configuration
+##############################################
+
 # BASH Aliases for all users
 echo 'alias log="sudo journalctl -o cat -f _SYSTEMD_UNIT=google-startup-scripts.service"' >> /etc/profile.d/00-aliases.sh
 echo 'alias fulllog="sudo journalctl -xefu google-startup-scripts -f"' >> /etc/profile.d/00-aliases.sh
@@ -10,16 +35,68 @@ echo 'alias restartipsec="sudo ipsec restart"' >> /etc/profile.d/00-aliases.sh
 
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
 
-#########################
-# Package Installation
-#########################
+##############################################
+# 1. Dynamic MOTD Configuration
+##############################################
+
+# Create a custom dynamic MOTD script
+cat > /etc/update-motd.d/99-custom-motd << "EOF"
+#!/bin/bash
+
+# ANSI color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+printf "$${BLUE}*******************************************$${NC}\n"
+printf "$${BLUE}*                                         *$${NC}\n"
+printf "$${BLUE}*       WELCOME TO THE Magic WAN          *$${NC}\n"
+printf "$${BLUE}*                                         *$${NC}\n"
+
+# Check tunnel status
+if ipsec status | grep -q "ESTABLISHED"; then
+    printf "$${BLUE}*  $${GREEN}• IPsec Tunnel: CONNECTED$${BLUE}          *$${NC}\n"
+else
+    printf "$${BLUE}*  $${RED}• IPsec Tunnel: DISCONNECTED$${BLUE}         *$${NC}\n"
+fi
+
+printf "$${BLUE}*                                         *$${NC}\n"
+printf "$${BLUE}*  Helpful aliases:                       *$${NC}\n"
+printf "$${BLUE}*    • showipsec  • reloadipsec           *$${NC}\n"
+printf "$${BLUE}*    • whereami   • restartipsec          *$${NC}\n"
+printf "$${BLUE}*                                         *$${NC}\n"
+printf "$${BLUE}*******************************************$${NC}\n"
+
+# Show system info
+printf "\n"
+printf "System information:\n"
+printf "-------------------\n"
+printf "Hostname: $(hostname)\n"
+printf "Kernel:   $(uname -r)\n"
+printf "Uptime:   $(uptime -p)\n"
+EOF
+
+# Make the script executable
+chmod +x /etc/update-motd.d/99-custom-motd
+
+# Optionally disable some of the default MOTD scripts that you don't want
+if [ -f /etc/update-motd.d/10-help-text ]; then
+    chmod -x /etc/update-motd.d/10-help-text
+fi
+
+##############################################
+# 2. Package Installation
+# Installs required dependencies for networking
+# and IPsec tunnel configuration
+##############################################
 
 apt-get update
 apt-get install curl jq net-tools strongswan -y
 
-#########################
-# Networking Configuration
-#########################
+##############################################
+# 3. Networking Configuration - Loopback
+##############################################
 
 # Associate IP Address to Loopback
 cat > /etc/netplan/99-loopback.yaml << "EOF"
@@ -40,98 +117,141 @@ netplan apply
 # Restart Networking Service to ensure all sysctl changes are updated
 systemctl restart systemd-networkd
 
-#########################
-# StrongSwan Configuration
-#########################
+##############################################
+# 4. StrongSwan Configuration
+##############################################
+
+log "Starting IPSec setup..."
 
 # https://developers.cloudflare.com/magic-wan/configuration/manually/third-party/strongswan/
 
-# The following configuration ensure not all traffic (0/0) is routed through the IPSec tunnel
+# Modify StrongSwan daemon configuration
+# - install_routes=no: Prevents automatic route installation (we'll set up custom routes manually)
+# - install_virtual_ip=no: Disables automatic virtual IP assignment
+# - delete_rekeyed_delay=150: Sets delay in seconds before deleting old IKE_SAs after rekeying
 sed -i '9i install_routes = no' /etc/strongswan.conf
 sed -i '10i install_virtual_ip = no' /etc/strongswan.conf
 sed -i '11i delete_rekeyed_delay = 150' /etc/strongswan.conf
 
-# configure IPsec file
+# Configure IPsec with the following settings:
+# - IKEv2 for key exchange
+# - PSK authentication
+# - AES256GCM16 encryption with SHA512 for integrity
 cat > /etc/ipsec.conf << "EOF"
 # ipsec.conf - strongSwan IPsec configuration file
+
+# Global configuration parameters
 config setup
-    charondebug="all"
-    uniqueids=yes
+    charondebug="all"     # Enable full debugging output
+    uniqueids=yes         # Use unique IDs for each connection
 
+# Default connection parameters applied to all connections
 conn %default
-    ikelifetime=4h
-    rekey=yes
-    reauth=no
-    keyexchange=ikev2
-    authby=secret
-    dpdaction=restart
-    closeaction=restart
+    ikelifetime=4h        # How long IKE_SAs should be valid
+    rekey=yes             # Automatically rekey connections
+    reauth=no             # Don't require reauthentication on rekey
+    keyexchange=ikev2     # Use IKEv2 protocol (more secure than IKEv1)
+    authby=secret         # Use pre-shared keys for authentication
+    dpdaction=restart     # Restart connection if dead peer detected
+    closeaction=restart   # Restart connection if closed
 
+# Cloudflare-specific tunnel configuration
 conn cloudflare-ipsec
-    auto=start
-    type=tunnel
-    fragmentation=no
-    forceencaps=no
-    leftauth=psk
-    # Private IP of the VM
-    left=%any
-    # Tunnel ID from dashboard, in this example FQDN is used
-    leftid=LEFTFQDN
-    leftsubnet=0.0.0.0/0
-    # Cloudflare Anycast IP
-    right=${cf_endpoint}
-    rightid=${cf_endpoint}
-    rightsubnet=0.0.0.0/0
-    rightauth=psk
-    ike=aes256gcm16-prfsha512-modp2048
-    esp=aes256gcm16-prfsha512-modp2048
-    replay_window=0
-    mark_in=42
-    mark_out=42
-    leftupdown=/etc/strongswan.d/ipsec-vti.sh
+    auto=start            # Automatically start this connection at boot
+    type=tunnel           # Create a tunnel between networks
+    fragmentation=no      # Disable IP fragmentation for better performance
+    forceencaps=no        # Don't force UDP encapsulation
+    leftauth=psk          # Use pre-shared key for our side authentication
+    left=%any             # Use any available local IP as source
+    leftid=LEFTFQDN       # Our tunnel identifier (will be replaced later)
+    leftsubnet=0.0.0.0/0  # Source network (all traffic)
+    right=${cf_endpoint}  # Cloudflare Anycast IP address
+    rightid=${cf_endpoint}# Cloudflare identifier
+    rightsubnet=0.0.0.0/0 # Destination network (all traffic)
+    rightauth=psk         # Use pre-shared key for Cloudflare auth
+    ike=aes256gcm16-prfsha512-modp2048  # IKE crypto parameters (encryption-PRF-DH)
+    esp=aes256gcm16-prfsha512-modp2048  # ESP crypto parameters (data protection)
+    replay_window=0       # Disable anti-replay protection (Cloudflare requirement)
+    mark_in=42            # Packet mark for incoming traffic (used by VTI)
+    mark_out=42           # Packet mark for outgoing traffic (used by VTI)
+    leftupdown=/etc/strongswan.d/ipsec-vti.sh  # Script to create VTI interface
 EOF
 
-# Create the Virtual Tunnel Interface
+# Create Virtual Tunnel Interface (VTI) setup script
+# This script creates a virtual tunnel interface when the IPsec connection is established
+# and removes it when the connection goes down
 cat > /etc/strongswan.d/ipsec-vti.sh << "EOF"
 #!/bin/bash
-set -o nounset
-set -o errexit
+set -o nounset    # Exit when script tries to use undeclared variables
+set -o errexit    # Exit when command fails
+
+# Store IP command path to variable for easier use
 IP=$(which ip)
 
-# Use parameter expansion instead of arrays
-PLUTO_MARK_OUT_FIRST=$${PLUTO_MARK_OUT%%/*}
-PLUTO_MARK_IN_FIRST=$${PLUTO_MARK_IN%%/*}
+# Parse the PLUTO_MARK variables to get the first component
+# These marks come from the IPsec configuration and are used for the VTI interface
+PLUTO_MARK_OUT_FIRST=$${PLUTO_MARK_OUT%%/*}  # Extract first part of outbound mark
+PLUTO_MARK_IN_FIRST=$${PLUTO_MARK_IN%%/*}    # Extract first part of inbound mark
 
 # Update the following variables
-VTI_IF="vti0"
-VTI_LOCAL_IP="${vm_int_addr}" # Host side of tunnel
-VTI_REMOTE_IP="${cf_int_addr}" # Cloudflare side of tunnel
-ETH_INTF="ens4"
+VTI_IF="vti0"                     # Name of the virtual tunnel interface
+VTI_LOCAL_IP="${vm_int_addr}"     # Local IP for the tunnel interface (our side)
+VTI_REMOTE_IP="${cf_int_addr}"    # Remote IP for the tunnel interface (Cloudflare side)
+ETH_INTF="ens4"                   # Physical network interface name
 
+# Handle different IPsec events
 case "$${PLUTO_VERB}" in
      up-client)
+        # When tunnel comes up:
+
+        # 1. Create the VTI interface
+        #    - local: Our public IP (PLUTO_ME is set by StrongSwan)
+        #    - remote: Cloudflare's IP (PLUTO_PEER is set by StrongSwan)
+        #    - okey/ikey: Mark values for outbound/inbound traffic
         $IP link add $${VTI_IF} type vti local $${PLUTO_ME} remote $${PLUTO_PEER} okey $${PLUTO_MARK_OUT_FIRST} ikey $${PLUTO_MARK_IN_FIRST}
+        
+        # 2. Configure IP addressing on the tunnel
         $IP addr add $${VTI_LOCAL_IP} remote $${VTI_REMOTE_IP} dev $${VTI_IF}
+
+        # 3. Set MTU to 1436 (standard for VTI interfaces over IPsec) and bring interface up
         $IP link set $${VTI_IF} up mtu 1436
-         sysctl -w net.ipv4.ip_forward=1
-         sysctl -w "net.ipv4.conf.$${VTI_IF}.disable_policy=1"
-         sysctl -w "net.ipv4.conf.$${VTI_IF}.accept_local=1"
-         sysctl -w "net.ipv4.conf.$${VTI_IF}.rp_filter=0"
-         sysctl -w "net.ipv4.conf.$${ETH_INTF}.accept_local=1"
-         sysctl -w "net.ipv4.conf.$${ETH_INTF}.rp_filter=0"
-         # Networks I want to route through the tunnel
-         ip route add 10.10.10.0/24 dev $${VTI_IF} # Tunnel Interface addresses
-         ip route add 172.17.255.0/24 dev $${VTI_IF} # Loopback addresses
-         ip route add 100.96.0.0/12 dev $${VTI_IF} # Address range for WARP
-         ;;
+        
+        # 4. Configure kernel networking parameters
+        #    - Enable IP forwarding for routing between interfaces
+        sysctl -w net.ipv4.ip_forward=1
+        
+        #    - Disable IPsec policy checks on VTI interface (already handled by tunnel)
+        sysctl -w "net.ipv4.conf.$${VTI_IF}.disable_policy=1"
+        
+        #    - Allow packets from/to same interface (required for some routing scenarios)
+        sysctl -w "net.ipv4.conf.$${VTI_IF}.accept_local=1"
+        
+        #    - Disable reverse path filtering (prevents dropping asymmetrically routed packets)
+        sysctl -w "net.ipv4.conf.$${VTI_IF}.rp_filter=0"
+        
+        #    - Same settings for physical interface to ensure consistency
+        sysctl -w "net.ipv4.conf.$${ETH_INTF}.accept_local=1"
+        sysctl -w "net.ipv4.conf.$${ETH_INTF}.rp_filter=0"
+        
+        # 5. Add specific routes through the tunnel interface
+        # Each subnet represents different network segments that should go through Cloudflare
+        ip route add 10.10.10.0/24 dev $${VTI_IF}    # Tunnel interface address subnet
+        ip route add 172.17.255.0/24 dev $${VTI_IF}  # Loopback address subnet
+        ip route add 100.96.0.0/12 dev $${VTI_IF}    # Cloudflare WARP client address range
+        ;;
+        
      down-client)
-         # Delete the network routes when the tunnel is downed.
-         ip route del 10.10.10.0/24 dev $${VTI_IF} # Tunnel Interface addresses
-         ip route del 172.17.255.0/24 dev $${VTI_IF} # Loopback addresses
-         ip route del 100.96.0.0/12 dev $${VTI_IF} # Address range for WARP
-         # Delete the tunnel
-         ip tunnel del "$${VTI_IF}"
-         ;;
+        # When tunnel goes down:
+        
+        # 1. Remove all routes that were added through the tunnel
+        #    (must be done before removing the interface)
+        ip route del 10.10.10.0/24 dev $${VTI_IF}    # Remove tunnel subnet route
+        ip route del 172.17.255.0/24 dev $${VTI_IF}  # Remove loopback subnet route
+        ip route del 100.96.0.0/12 dev $${VTI_IF}    # Remove WARP subnet route
+        
+        # 2. Remove the VTI interface completely
+        ip tunnel del "$${VTI_IF}"
+        ;;
 esac
 EOF
 
@@ -172,3 +292,5 @@ ipsec down cloudflare-ipsec
 ipsec reload
 ipsec restart
 ipsec up cloudflare-ipsec
+
+log "Successfully configured IPSec tunnel"
