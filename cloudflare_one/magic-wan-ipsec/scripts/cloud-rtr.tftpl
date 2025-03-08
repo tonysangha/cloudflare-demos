@@ -49,16 +49,22 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# IP Table Colours
+HEADER_COLOR='\033[1;36m'  # Bold Cyan
+BORDER_COLOR='\033[0;34m'  # Blue
+IFACE_COLOR='\033[0;92m'   # High Intensity Green
+IP_COLOR='\033[0;93m'      # High Intensity Yellow
+
 printf "$${BLUE}*******************************************$${NC}\n"
 printf "$${BLUE}*                                         *$${NC}\n"
-printf "$${BLUE}*       WELCOME TO THE Magic WAN          *$${NC}\n"
+printf "$${BLUE}*          Cloudflare Magic WAN           *$${NC}\n"
 printf "$${BLUE}*                                         *$${NC}\n"
 
 # Check tunnel status
 if ipsec status | grep -q "ESTABLISHED"; then
-    printf "$${BLUE}*  $${GREEN}• IPsec Tunnel: CONNECTED$${BLUE}          *$${NC}\n"
+    printf "$${BLUE}*  $${GREEN}• IPsec Tunnel: CONNECTED$${BLUE}           *$${NC}\n"
 else
-    printf "$${BLUE}*  $${RED}• IPsec Tunnel: DISCONNECTED$${BLUE}         *$${NC}\n"
+    printf "$${BLUE}*  $${RED}• IPsec Tunnel: DISCONNECTED$${BLUE}          *$${NC}\n"
 fi
 
 printf "$${BLUE}*                                         *$${NC}\n"
@@ -72,9 +78,23 @@ printf "$${BLUE}*******************************************$${NC}\n"
 printf "\n"
 printf "System information:\n"
 printf "-------------------\n"
-printf "Hostname: $(hostname)\n"
+printf "Hostname: $(hostname --short)\n"
 printf "Kernel:   $(uname -r)\n"
 printf "Uptime:   $(uptime -p)\n"
+
+# Display network interfaces in a table format
+printf "\n"
+printf "Network interfaces:\n"
+printf "-------------------\n"
+echo -e "$${BORDER_COLOR}+-----------------+-----------------+$${NC}"
+echo -e "$${BORDER_COLOR}|$${NC} $${HEADER_COLOR}Interface       $${NC}$${BORDER_COLOR}|$${NC} $${HEADER_COLOR}IPv4 Address    $${NC}$${BORDER_COLOR}|$${NC}"
+echo -e "$${BORDER_COLOR}+-----------------+-----------------+$${NC}"
+ip -4 -o addr show | awk -v iface_color="$${IFACE_COLOR}" -v ip_color="$${IP_COLOR}" -v border="$${BORDER_COLOR}" -v nc="$${NC}" '{
+    split($4, a, "/");
+    printf("%s|%s %s%-15s%s %s|%s %s%-15s%s %s|%s\n", 
+           border, nc, iface_color, $2, nc, border, nc, ip_color, a[1], nc, border, nc);
+}'
+echo -e "$${BORDER_COLOR}+-----------------+-----------------+$${NC}"
 EOF
 
 # Make the script executable
