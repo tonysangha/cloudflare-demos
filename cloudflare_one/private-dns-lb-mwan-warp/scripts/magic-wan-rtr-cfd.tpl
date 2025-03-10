@@ -91,7 +91,7 @@ printf "$${BLUE}*******************************************$${NC}\n"
 printf "\n"
 printf "System information:\n"
 printf "-------------------\n"
-printf "Hostname: $(hostname)\n"
+printf "Hostname: $(hostname --short)\n"
 printf "Kernel:   $(uname -r)\n"
 printf "Uptime:   $(uptime -p)\n"
 
